@@ -1,6 +1,10 @@
 package ohtu;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import ohtu.stats.CourseStats;
+import ohtu.stats.WeekStats;
 import org.apache.http.client.fluent.Request;
 
 import java.io.IOException;
@@ -17,15 +21,35 @@ public class Main {
     private static Course[] loadCourses() throws IOException {
         String url = "https://studies.cs.helsinki.fi/courses/courseinfo/";
         String body = Request.Get(url).execute().returnContent().asString();
-        System.out.println(body);
         Gson mapper = new Gson();
         return mapper.fromJson(body, Course[].class);
     }
 
-    private static void printStudentData(Student student) {
-        System.out.println("opiskelijanumero: " + student.getStudentNumber() + "\n");
+    private static CourseStats loadCourseStats(String name) throws IOException {
+        String url = "https://studies.cs.helsinki.fi/courses/" + name + "/stats";
+        String text = Request.Get(url).execute().returnContent().asString();
+        JsonParser parser = new JsonParser();
+        JsonObject data = parser.parse(text).getAsJsonObject();
+
+        CourseStats stats = new CourseStats();
+        WeekStats[] weeklyStats = new WeekStats[data.keySet().size()];
+        Gson mapper = new Gson();
+        int i = 0;
+        for (String key : data.keySet()) {
+            JsonObject statsData = data.getAsJsonObject(key);
+
+            WeekStats weekStats = mapper.fromJson(statsData, WeekStats.class);
+            weeklyStats[i++] = weekStats;
+        }
+        stats.setWeeklyStats(weeklyStats);
+        return stats;
+    }
+
+    private static void printStudentData(Student student) throws IOException {
+        System.out.println("Opiskelijanumero: " + student.getStudentNumber() + "\n");
         for (CourseSubmissions courseSub : student.getSubmissions()) {
             Course course = courseSub.getCourse();
+            CourseStats stats = loadCourseStats(course.getName());
 
             System.out.println(course.getTitle() + "\n");
             for (int weekNr = 1; weekNr <= course.getWeekCount(); weekNr++) {
@@ -40,6 +64,9 @@ public class Main {
             }
             System.out.println("\nYhteensä: " + courseSub.getSubmittedExerciseCount() + "/" + course.getTotalExerciseCount()
                     + " tehtävää, " + courseSub.getSubmittedHourCount() + " tuntia");
+            System.out.println("\nKursilla yhteensä " + stats.getTotalSubmissions() + " palautusta"
+                    + ", palautettuja tehtäviä " + stats.getTotalExercisesReturned() + " kpl"
+                    + ", aikaa käytetty yhteensä " + stats.getTotalHours() + " tuntia");
             System.out.println();
         }
     }
